@@ -100,6 +100,35 @@ config BFQ_GROUP_IOSCHED
        Enable hierarchical scheduling in BFQ, using the blkio
        (cgroups-v1) or io (cgroups-v2) controller.
 
+choice
+
+	prompt "Default multi-queue I/O scheduler"
+	default DEFAULT_MQ_DEADLINE
+	help
+	  Select the multiqueue I/O scheduler which will be used by default for all
+	  block devices if multiqueue is enabled within defconfig.
+
+	config DEFAULT_MQ_DEADLINE
+		bool "Mq-deadline" if MQ_IOSCHED_DEADLINE=y
+
+	config DEFAULT_KYBER
+		bool "Kyber" if MQ_IOSCHED_KYBER=y
+
+	config DEFAULT_BFQ
+		bool "BFQ" if IOSCHED_BFQ=y
+
+	config DEFAULT_NONE
+		bool "None"
+
+endchoice
+
+config DEFAULT_MQ_IOSCHED
+	string
+	default "mq-deadline" if DEFAULT_MQ_DEADLINE
+	default "kyber" if DEFAULT_KYBER
+	default "bfq" if DEFAULT_BFQ
+	default "none" if DEFAULT_NONE	
+
 endmenu
 
 endif
