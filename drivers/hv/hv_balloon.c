@@ -31,8 +31,10 @@
 #include <linux/memory.h>
 #include <linux/notifier.h>
 #include <linux/percpu_counter.h>
-
+#include <linux/page_reporting.h>
 #include <linux/hyperv.h>
+
+#include <asm/mshyperv.h>
 
 #define CREATE_TRACE_POINTS
 #include "hv_trace_balloon.h"
@@ -572,6 +574,10 @@ struct hv_dynmem_device {
 	 * The negotiated version agreed by host.
 	 */
 	__u32 version;
+
+#ifdef CONFIG_PAGE_REPORTING
+	struct page_reporting_dev_info ph_dev_info;
+#endif
 };
 
 static struct hv_dynmem_device dm_device;
@@ -1215,10 +1221,7 @@ static unsigned int alloc_balloon_pages(struct hv_dynmem_device *dm,
 	unsigned int i = 0;
 	struct page *pg;
 
-	if (num_pages < alloc_unit)
-		return 0;
-
-	for (i = 0; (i * alloc_unit) < num_pages; i++) {
+	for (i = 0; i < num_pages / alloc_unit; i++) {
 		if (bl_resp->hdr.size + sizeof(union dm_mem_page_range) >
 			PAGE_SIZE)
 			return i * alloc_unit;
@@ -1252,7 +1255,7 @@ static unsigned int alloc_balloon_pages(struct hv_dynmem_device *dm,
 
 	}
 
-	return num_pages;
+	return i * alloc_unit;
 }
 
 static void balloon_up(struct work_struct *dummy)
@@ -1267,9 +1270,6 @@ static void balloon_up(struct work_struct *dummy)
 	long avail_pages;
 	unsigned long floor;
 
-	/* The host balloons pages in 2M granularity. */
-	WARN_ON_ONCE(num_pages % PAGES_IN_2M != 0);
-
 	/*
 	 * We will attempt 2M allocations. However, if we fail to
 	 * allocate 2M chunks, we will go back to 4k allocations.
@@ -1279,14 +1279,13 @@ static void balloon_up(struct work_struct *dummy)
 	avail_pages = si_mem_available();
 	floor = compute_balloon_floor();
 
-	/* Refuse to balloon below the floor, keep the 2M granularity. */
+	/* Refuse to balloon below the floor. */
 	if (avail_pages < num_pages || avail_pages - num_pages < floor) {
 		pr_warn("Balloon request will be partially fulfilled. %s\n",
 			avail_pages < num_pages ? "Not enough memory." :
 			"Balloon floor reached.");
 
 		num_pages = avail_pages > floor ? (avail_pages - floor) : 0;
-		num_pages -= num_pages % PAGES_IN_2M;
 	}
 
 	while (!done) {
@@ -1562,6 +1561,93 @@ static void balloon_onchannelcallback(void *context)
 
 }
 
+#ifdef CONFIG_PAGE_REPORTING
+static u64 hyperv_query_ext_cap(void)
+{
+	u64 *cap;
+	unsigned long flags;
+	u64 ret = 0;
+
+	local_irq_save(flags);
+	cap = *(u64 **)this_cpu_ptr(hyperv_pcpu_input_arg);
+	if (hv_do_hypercall(HVCALL_QUERY_CAPABILITIES, NULL, cap) ==
+	    HV_STATUS_SUCCESS)
+		ret = *cap;
+
+	local_irq_restore(flags);
+	return ret;
+}
+
+static void hyperv_discard_pages(struct scatterlist **sgs, int nents)
+{
+	unsigned long flags;
+	struct hv_memory_hint *hint;
+	int i;
+	struct scatterlist *sg;
+	u64 status;
+
+	WARN_ON(nents > HV_MAX_GPA_PAGE_RANGES);
+	local_irq_save(flags);
+	hint = *(struct hv_memory_hint **)this_cpu_ptr(hyperv_pcpu_input_arg);
+	if (!hint) {
+		local_irq_restore(flags);
+		return;
+	}
+
+	hint->type = HV_MEMORY_HINT_TYPE_COLD_DISCARD;
+	hint->reserved = 0;
+	for (i = 0, sg = sgs[0]; sg; sg = sg_next(sg), i++) {
+		int order;
+		union hv_gpa_page_range *range;
+
+		order = get_order(sg->length);
+		range = &hint->ranges[i];
+		range->address_space = 0;
+		range->page.largepage = 1;
+		range->page.additional_pages = (1ull << (order - 9)) - 1;
+		range->base_large_pfn = page_to_pfn(sg_page(sg)) >> 9;
+	}
+
+	WARN_ON(i != nents);
+
+	status = hv_do_rep_hypercall(HVCALL_MEMORY_HEAT_HINT, nents, 0,
+				     hint, NULL);
+	local_irq_restore(flags);
+	status &= HV_HYPERCALL_RESULT_MASK;
+	WARN_ON(status != HV_STATUS_SUCCESS);
+}
+
+static void hv_page_hinting(struct page_reporting_dev_info *ph_dev_info,
+		     unsigned int nents)
+{
+	hyperv_discard_pages(&ph_dev_info->sg, nents);
+}
+
+static int enable_hinting(void)
+{
+	int ret;
+
+	if (!(hyperv_query_ext_cap() &
+	      HV_CAPABILITY_MEMORY_COLD_DISCARD_HINT)) {
+		pr_info("cold discard hint not supported\n");
+		return 0;
+	}
+
+	dm_device.ph_dev_info.report = hv_page_hinting;
+	dm_device.ph_dev_info.capacity = HV_MAX_GPA_PAGE_RANGES;
+	ret = page_reporting_register(&dm_device.ph_dev_info);
+	if (ret == 0)
+		pr_info("cold memory discard enabled\n");
+	return ret;
+}
+
+static void disable_hinting(void)
+{
+	if (dm_device.ph_dev_info.report)
+		page_reporting_unregister(&dm_device.ph_dev_info);
+}
+#endif //CONFIG_PAGE_REPORTING
+
 static int balloon_probe(struct hv_device *dev,
 			const struct hv_vmbus_device_id *dev_id)
 {
@@ -1704,6 +1790,11 @@ static int balloon_probe(struct hv_device *dev,
 	dm_device.state = DM_INITIALIZED;
 	last_post_time = jiffies;
 
+#ifdef CONFIG_PAGE_REPORTING
+	if (enable_hinting() < 0)
+		goto probe_error2;
+#endif
+
 	return 0;
 
 probe_error2:
@@ -1731,6 +1822,10 @@ static int balloon_remove(struct hv_device *dev)
 
 	cancel_work_sync(&dm->balloon_wrk.wrk);
 	cancel_work_sync(&dm->ha_wrk.wrk);
+
+#ifdef CONFIG_PAGE_REPORTING
+	disable_hinting();
+#endif
 
 	vmbus_close(dev->channel);
 	kthread_stop(dm->thread);
