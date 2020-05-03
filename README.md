@@ -1,12 +1,12 @@
-# Proton Kernel for WSL 2
+# iMMENSITY Kernel for WSL 2
 
-Proton Kernel is a custom modified Linux kernel for the [Windows Subsystem for Linux 2](https://devblogs.microsoft.com/commandline/announcing-wsl-2/), using a [clean import of Microsoft's kernel changes](https://github.com/kdrag0n/msft-wsl2-kernel) as a base. The goal is to improve performance, memory utilization, and power efficiency while reducing boot times and making other improvements to the overall user experience.
+iMMENSITY Kernel is a custom modified Linux kernel based on Proton kernel for the [Windows Subsystem for Linux 2](https://devblogs.microsoft.com/commandline/announcing-wsl-2/), using a [clean import of Microsoft's kernel changes](https://github.com/kdrag0n/msft-wsl2-kernel) as a base. The goal is to improve performance, memory utilization, and power efficiency while reducing boot times and making other improvements to the overall user experience.
 
 ## Motivation
 
 Microsoft did a relatively good job on their minimal set of changes to the Linux kernel in WSL 2, but there is always room for improvement. For example, one can compile the kernel with a newer version of GCC (Microsoft used a custom build of GCC 7.3.0) or even Clang. This can offer small performance improvements and help debug certain parts of both the kernel and the compiler.
 
-Proton Kernel aims to improve upon Microsoft's kernel in every aspect and thus improve the overall WSL 2 user experience.
+iMMENSITY Kernel aims to improve upon Microsoft's kernel in every aspect and thus improve the overall WSL 2 user experience.
 
 ## Compilation
 
