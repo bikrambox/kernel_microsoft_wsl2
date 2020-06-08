@@ -1,10 +1,10 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/x86 4.19.120 Kernel Configuration
+# Linux/x86 4.19.127 Kernel Configuration
 #
 
 #
-# Compiler: Proton clang version 11.0.0 (https://github.com/llvm/llvm-project b06a227bb15fc72f82214d7bf7a257b23a1a6468)
+# Compiler: Proton clang version 11.0.0 (https://github.com/llvm/llvm-project 8fc1e307f9c41e9958f78c75648e40744198c4b2)
 #
 CONFIG_GCC_VERSION=0
 CONFIG_CC_IS_CLANG=y
@@ -817,8 +817,6 @@ CONFIG_XFRM_USER=y
 # CONFIG_NET_KEY is not set
 # CONFIG_XDP_SOCKETS is not set
 CONFIG_INET=y
-CONFIG_WIREGUARD=y
-# CONFIG_WIREGUARD_DEBUG is not set
 # CONFIG_IP_MULTICAST is not set
 CONFIG_IP_ADVANCED_ROUTER=y
 # CONFIG_IP_FIB_TRIE_STATS is not set
@@ -2012,6 +2010,7 @@ CONFIG_VGA_ARB_MAX_GPUS=16
 #
 # AMD Library routines
 #
+# CONFIG_DXGKRNL is not set
 
 #
 # Frame buffer Devices
