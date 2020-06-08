@@ -7,7 +7,7 @@
 #
 
 # Path to executables in Clang toolchain
-clang_bin="$HOME/toolchains/proton-clang-10.0.0-20190723/bin"
+clang_bin="$HOME/toolchains/proton-clang/bin"
 
 # Number of parallel jobs to run
 # Do not remove; set to 1 for no parallelism.
