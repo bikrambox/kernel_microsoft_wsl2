@@ -639,8 +639,6 @@ static ssize_t hvs_stream_enqueue(struct vsock_sock *vsk, struct msghdr *msg,
 	ssize_t ret = 0;
 	ssize_t bytes_written = 0;
 
-	BUILD_BUG_ON(sizeof(send_buf) != PAGE_SIZE_4K);
-
 	/* Reader(s) could be draining data from the channel as we write.
 	 * Maximize bandwidth, by iterating until the channel is found to be
 	 * full.
